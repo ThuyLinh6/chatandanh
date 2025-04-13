@@ -1,13 +1,12 @@
 import telebot
 from telebot import types
+from config import TOKEN
 
-TOKEN = '7951367517:AAGHuBzbp7mSULjmjtacQieNVyQ2jhYoJic'
 bot = telebot.TeleBot(TOKEN)
 
 waiting_users = []
 active_chats = {}
 
-# Hàm dừng trò chuyện an toàn
 def stop_chat(user_id, notify=True):
     if user_id in active_chats:
         partner_id = active_chats.pop(user_id)
@@ -17,11 +16,10 @@ def stop_chat(user_id, notify=True):
                 bot.send_message(partner_id, "❌ Người bên kia đã dừng trò chuyện.\nNhấn /search để tìm người mới nhé!")
     elif user_id in waiting_users:
         waiting_users.remove(user_id)
-    
+
     if notify:
         bot.send_message(user_id, "🚫 Bạn đã dừng trò chuyện.")
 
-# Ghép người dùng trong hàng đợi
 def match_users():
     while len(waiting_users) >= 2:
         user1 = waiting_users.pop(0)
@@ -31,14 +29,12 @@ def match_users():
         bot.send_message(user1, "🔗 Đã tìm được người chat! Bắt đầu trò chuyện nào!")
         bot.send_message(user2, "🔗 Đã tìm được người chat! Bắt đầu trò chuyện nào!")
 
-# Lệnh /start
 @bot.message_handler(commands=['start'])
 def start(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add('/search', '/next', '/stop')
     bot.send_message(message.chat.id, "👋 Xin chào! Chọn chức năng bên dưới để bắt đầu.", reply_markup=markup)
 
-# Lệnh /search
 @bot.message_handler(commands=['search'])
 def search(message):
     user_id = message.chat.id
@@ -51,26 +47,36 @@ def search(message):
     else:
         bot.send_message(user_id, "🕐 Bạn đang chờ sẵn rồi. Đợi hệ thống ghép cặp nhé!")
 
-# Lệnh /next
 @bot.message_handler(commands=['next'])
 def next(message):
     user_id = message.chat.id
     stop_chat(user_id, notify=False)
     search(message)
 
-# Lệnh /stop
 @bot.message_handler(commands=['stop'])
 def stop(message):
     user_id = message.chat.id
     stop_chat(user_id)
 
-# Xử lý tin nhắn và media gửi đi
+@bot.message_handler(commands=['online'])
+def online(message):
+    bot.send_message(message.chat.id, f"👥 Hiện có {len(waiting_users)} người đang chờ ghép.")
+
+@bot.message_handler(commands=['help'])
+def help_command(message):
+    help_text = """📖 Hướng dẫn:
+👉 /search — Tìm người để trò chuyện
+👉 /next — Chuyển người khác
+👉 /stop — Dừng trò chuyện
+👉 /online — Xem số người đang chờ"""
+    bot.send_message(message.chat.id, help_text)
+
 @bot.message_handler(content_types=['text', 'photo', 'video', 'sticker', 'voice', 'document'])
 def chat(message):
     user_id = message.chat.id
     partner_id = active_chats.get(user_id)
 
-    if not partner_id or partner_id not in active_chats:
+    if not partner_id or active_chats.get(partner_id) != user_id:
         bot.send_message(user_id, "⚠️ Bạn chưa có người trò chuyện.\nNhấn /search để bắt đầu tìm người nhé!")
         stop_chat(user_id)
         return
@@ -90,8 +96,8 @@ def chat(message):
             bot.send_document(partner_id, message.document.file_id, caption=message.caption)
         else:
             bot.send_message(user_id, "❗ Không hỗ trợ loại nội dung này.")
-    except Exception as e:
-        bot.send_message(user_id, f"❗ Gửi tin nhắn thất bại: {e}")
-
+    except Exception:
+        bot.send_message(user_id, "❗ Gửi tin nhắn thất bại. Có thể người kia đã rời khỏi.")
+        stop_chat(user_id)
 
 bot.infinity_polling()
