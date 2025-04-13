@@ -28,5 +28,5 @@ services:
 
 ## Liên hệ:
 Tác giả: Minh Hiếu
-Telegram: t.me/mmhieusocute
-Facebook: fb.me/lunax1603
+- Telegram: t.me/mmhieusocute
+- Facebook: fb.me/lunax1603
