@@ -27,4 +27,6 @@ services:
 ```
 
 ## Liên hệ:
-Tác giả: [Tên của bạn]
+Tác giả: Minh Hiếu
+Telegram: t.me/mmhieusocute
+Facebook: fb.me/lunax1603
