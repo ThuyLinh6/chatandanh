@@ -1,8 +1,8 @@
 import telebot
 from telebot import types
-from config import TOKEN
+import os
 
-bot = telebot.TeleBot(TOKEN)
+bot = telebot.TeleBot(os.getenv("BOT_TOKEN"))
 
 waiting_users = []
 active_chats = {}
@@ -96,7 +96,8 @@ def chat(message):
             bot.send_document(partner_id, message.document.file_id, caption=message.caption)
         else:
             bot.send_message(user_id, "❗ Không hỗ trợ loại nội dung này.")
-    except Exception:
+    except Exception as e:
+        print(e)
         bot.send_message(user_id, "❗ Gửi tin nhắn thất bại. Có thể người kia đã rời khỏi.")
         stop_chat(user_id)
 
