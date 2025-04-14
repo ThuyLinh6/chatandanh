@@ -23,7 +23,6 @@ Bot chat ẩn danh giúp kết nối ngẫu nhiên 2 người dùng với nhau q
 5. Cấu hình biến môi trường, ví dụ: `BOT_TOKEN` cho bot Telegram.
 6. Railway sẽ tự động phát hiện ứng dụng Python và bắt đầu build và deploy.
 
-
 ### Biến môi trường (Environment Variables):
 
 - `BOT_TOKEN`: Mã token của bot Telegram. Bạn cần tạo bot và lấy token từ [BotFather](https://core.telegram.org/bots#botfather).
@@ -31,5 +30,5 @@ Bot chat ẩn danh giúp kết nối ngẫu nhiên 2 người dùng với nhau q
 
 ## Liên hệ:
 Tác giả: Minh Hiếu  
-- Telegram: [@mmhieusocu](https://t.me/mmhieusocute)  
+- Telegram: [@mmhieusocute](https://t.me/mmhieusocute)  
 - Facebook: [fb.me/lunax1603](https://fb.me/lunax1603)
