@@ -1,62 +1,64 @@
 import telebot
 from telebot import types
 import os
-from time import time
 
 bot = telebot.TeleBot(os.getenv("BOT_TOKEN"))
 
 waiting_users = []
 active_chats = {}
-waiting_start_time = {}
 user_languages = {}
 
 messages = {
     'vi': {
         'start': "👋 Xin chào! Chọn chức năng bên dưới để bắt đầu.",
-        'in_chat': "❗ Bạn đang trong một cuộc trò chuyện rồi!\nDùng nút bên dưới để tìm người mới hoặc dừng lại.",
+        'in_chat': "❗ Bạn đang trong một cuộc trò chuyện rồi!",
         'waiting': "⏳ Bạn đã vào hàng đợi. Đợi tí nhé...",
-        'already_waiting': "🕐 Bạn đang chờ sẵn rồi. Đợi hệ thống ghép cặp nhé!",
-        'no_chat': "⚠️ Bạn chưa có người trò chuyện.\nNhấn 'Tìm người trò chuyện' để bắt đầu tìm người nhé!",
+        'no_chat': "⚠️ Bạn chưa có cuộc trò chuyện nào.\nNhấn /search để tìm người nhé!",
         'stop': "🚫 Bạn đã dừng trò chuyện.",
-        'search': "🔗 Đã tìm được người chat! Bắt đầu trò chuyện nào!",
+        'search': "🔗 Đã tìm được người chat! Bắt đầu trò chuyện!",
         'online': "👥 Hiện có {0} người đang chờ ghép.",
         'help': """📖 Hướng dẫn:
-👉 Tìm người trò chuyện — Bắt đầu tìm người
-👉 Tìm người khác — Chuyển người khác
-👉 Dừng trò chuyện — Kết thúc cuộc trò chuyện
-👉 Đổi ngôn ngữ — Chọn ngôn ngữ giao diện"""
+👉 /search - Tìm người trò chuyện
+👉 /next - Chuyển người khác
+👉 /stop - Dừng trò chuyện
+👉 /online - Xem số người chờ
+👉 /lang - Đổi ngôn ngữ"""
     },
     'en': {
         'start': "👋 Hello! Choose an option below to get started.",
-        'in_chat': "❗ You're already in a chat!\nUse the buttons below to find a new person or stop.",
+        'in_chat': "❗ You're already in a chat!",
         'waiting': "⏳ You are in the queue. Please wait...",
-        'already_waiting': "🕐 You are already waiting. The system is matching you.",
-        'no_chat': "⚠️ You don't have a chat partner yet.\nPress 'Find Chat Partner' to start finding someone!",
+        'no_chat': "⚠️ You don't have a chat yet.\nType /search to find someone!",
         'stop': "🚫 You have ended the conversation.",
-        'search': "🔗 You've been matched with a chat partner! Let's start chatting!",
-        'online': "👥 There are {0} people waiting to be matched.",
+        'search': "🔗 You've been matched! Start chatting!",
+        'online': "👥 {0} users are waiting.",
         'help': """📖 Instructions:
-👉 Find Chat Partner — Start finding someone
-👉 Find Another — Switch to another person
-👉 Stop Chat — End the conversation
-👉 Change Language — Change the interface language"""
+👉 /search - Find someone to chat
+👉 /next - Switch to another
+👉 /stop - End the conversation
+👉 /online - See online users
+👉 /lang - Change language"""
     }
 }
 
 def get_message(user_id, key, *args):
-    language = user_languages.get(user_id, 'vi')
-    return messages[language].get(key, '').format(*args)
+    lang = user_languages.get(user_id, 'vi')
+    return messages[lang][key].format(*args)
 
-def stop_chat(user_id, notify=True):
+def set_main_menu(user_id, in_chat=False):
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    if in_chat:
+        markup.add("Chuyển người khác", "Dừng trò chuyện")
+    else:
+        markup.add("Tìm người trò chuyện", "Đổi ngôn ngữ")
+    bot.send_message(user_id, get_message(user_id, 'start'), reply_markup=markup)
+
+def stop_chat(user_id):
     if user_id in active_chats:
         partner_id = active_chats.pop(user_id)
         if partner_id in active_chats:
             active_chats.pop(partner_id)
-            if notify:
-                bot.send_message(partner_id, get_message(partner_id, 'stop'))
-    elif user_id in waiting_users:
-        waiting_users.remove(user_id)
-    if notify:
+            bot.send_message(partner_id, get_message(partner_id, 'stop'))
         bot.send_message(user_id, get_message(user_id, 'stop'))
 
 def match_users():
@@ -65,103 +67,89 @@ def match_users():
         user2 = waiting_users.pop(0)
         active_chats[user1] = user2
         active_chats[user2] = user1
-        update_chat_markup(user1)
-        update_chat_markup(user2)
+        set_main_menu(user1, True)
+        set_main_menu(user2, True)
         bot.send_message(user1, get_message(user1, 'search'))
         bot.send_message(user2, get_message(user2, 'search'))
 
-def is_user_in_chat(user_id):
-    return user_id in active_chats or user_id in waiting_users
-
-def update_start_markup(user_id):
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("Tìm người trò chuyện", "Đổi ngôn ngữ")
-    bot.send_message(user_id, get_message(user_id, 'start'), reply_markup=markup)
-    bot.send_message(user_id, get_message(user_id, 'help'))
-
-def update_chat_markup(user_id):
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("Tìm người khác", "Dừng trò chuyện")
-    bot.send_message(user_id, get_message(user_id, 'in_chat'), reply_markup=markup)
-
-def update_lang_markup(user_id):
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("Tiếng Việt", "English")
-    bot.send_message(user_id, "🌐 Vui lòng chọn ngôn ngữ:", reply_markup=markup)
+def is_in_chat(user_id):
+    return user_id in active_chats
 
 @bot.message_handler(commands=['start'])
 def start(message):
     user_id = message.chat.id
     if user_id not in user_languages:
-        update_lang_markup(user_id)
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.add("Tiếng Việt", "English")
+        bot.send_message(user_id, "👋 Chọn ngôn ngữ:", reply_markup=markup)
     else:
-        update_start_markup(user_id)
+        set_main_menu(user_id)
+        bot.send_message(user_id, get_message(user_id, 'help'))
 
-@bot.message_handler(func=lambda message: message.text in ["Tiếng Việt", "English"])
-def set_language(message):
+@bot.message_handler(commands=['search'])
+def search(message):
     user_id = message.chat.id
-    user_languages[user_id] = 'vi' if message.text == "Tiếng Việt" else 'en'
-    update_start_markup(user_id)
-
-@bot.message_handler(func=lambda message: message.text in ["Tìm người trò chuyện"])
-def search_btn(message):
-    user_id = message.chat.id
-    if is_user_in_chat(user_id):
+    if is_in_chat(user_id):
         bot.send_message(user_id, get_message(user_id, 'in_chat'))
         return
-    waiting_users.append(user_id)
-    waiting_start_time[user_id] = time()
-    bot.send_message(user_id, get_message(user_id, 'waiting'))
-    match_users()
-
-@bot.message_handler(func=lambda message: message.text in ["Tìm người khác"])
-def next_btn(message):
-    user_id = message.chat.id
-    stop_chat(user_id, notify=False)
-    waiting_users.append(user_id)
-    waiting_start_time[user_id] = time()
-    bot.send_message(user_id, get_message(user_id, 'waiting'))
-    match_users()
-
-@bot.message_handler(func=lambda message: message.text in ["Dừng trò chuyện"])
-def stop_btn(message):
-    user_id = message.chat.id
-    stop_chat(user_id)
-    update_start_markup(user_id)
-
-@bot.message_handler(func=lambda message: message.text in ["Đổi ngôn ngữ"])
-def lang_btn(message):
-    user_id = message.chat.id
-    update_lang_markup(user_id)
-
-@bot.message_handler(content_types=['text', 'photo', 'video', 'sticker', 'voice', 'document'])
-def chat(message):
-    user_id = message.chat.id
-    partner_id = active_chats.get(user_id)
-    if not partner_id or active_chats.get(partner_id) != user_id:
-        bot.send_message(user_id, get_message(user_id, 'no_chat'))
-        stop_chat(user_id)
-        update_start_markup(user_id)
+    if user_id in waiting_users:
+        bot.send_message(user_id, get_message(user_id, 'waiting'))
         return
-    try:
-        if message.content_type == 'text':
-            bot.send_message(partner_id, message.text)
-        elif message.content_type == 'photo':
-            bot.send_photo(partner_id, message.photo[-1].file_id, caption=message.caption)
-        elif message.content_type == 'video':
-            bot.send_video(partner_id, message.video.file_id, caption=message.caption)
-        elif message.content_type == 'sticker':
-            bot.send_sticker(partner_id, message.sticker.file_id)
-        elif message.content_type == 'voice':
-            bot.send_voice(partner_id, message.voice.file_id)
-        elif message.content_type == 'document':
-            bot.send_document(partner_id, message.document.file_id, caption=message.caption)
+    waiting_users.append(user_id)
+    bot.send_message(user_id, get_message(user_id, 'waiting'))
+    match_users()
+
+@bot.message_handler(commands=['next'])
+def next(message):
+    stop_chat(message.chat.id)
+    search(message)
+
+@bot.message_handler(commands=['stop'])
+def stop(message):
+    stop_chat(message.chat.id)
+    set_main_menu(message.chat.id)
+
+@bot.message_handler(commands=['online'])
+def online(message):
+    bot.send_message(message.chat.id, get_message(message.chat.id, 'online', len(waiting_users)))
+
+@bot.message_handler(commands=['help'])
+def help_command(message):
+    bot.send_message(message.chat.id, get_message(message.chat.id, 'help'))
+
+@bot.message_handler(commands=['lang'])
+def lang(message):
+    user_id = message.chat.id
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("Tiếng Việt", "English")
+    bot.send_message(user_id, "🌐 Vui lòng chọn ngôn ngữ:", reply_markup=markup)
+
+@bot.message_handler(func=lambda m: m.text in ["Tiếng Việt", "English"])
+def set_language(message):
+    user_id = message.chat.id
+    lang = 'vi' if message.text == "Tiếng Việt" else 'en'
+    user_languages[user_id] = lang
+    set_main_menu(user_id)
+    bot.send_message(user_id, get_message(user_id, 'help'))
+
+@bot.message_handler(content_types=['text'])
+def handle_text(message):
+    user_id = message.chat.id
+    text = message.text
+
+    if text == "Tìm người trò chuyện":
+        search(message)
+    elif text == "Chuyển người khác":
+        next(message)
+    elif text == "Dừng trò chuyện":
+        stop(message)
+    elif text == "Đổi ngôn ngữ":
+        lang(message)
+    else:
+        if is_in_chat(user_id):
+            partner_id = active_chats[user_id]
+            bot.send_message(partner_id, text)
         else:
-            bot.send_message(user_id, "❗ Không hỗ trợ loại nội dung này.")
-    except Exception as e:
-        print(e)
-        bot.send_message(user_id, get_message(user_id, 'no_chat'))
-        stop_chat(user_id)
-        update_start_markup(user_id)
+            bot.send_message(user_id, get_message(user_id, 'no_chat'))
 
 bot.infinity_polling()
