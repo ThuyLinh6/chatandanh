@@ -20,7 +20,8 @@ messages = {
         'not_in_room': "❗ Bạn không ở phòng nào.",
         'room_broadcast': "{0}: {1}",
         'choose_language': "🌍 Vui lòng chọn ngôn ngữ:",
-        'language_set': "✅ Đã chuyển ngôn ngữ."
+        'language_set': "✅ Đã chuyển ngôn ngữ.",
+        'room_full': "❗ Phòng đã đầy. Bạn sẽ được đưa vào phòng mới.",
     },
     'en': {
         'start': "👋 Hello! Choose an option below to get started.",
@@ -33,7 +34,8 @@ messages = {
         'not_in_room': "❗ You're not in any room.",
         'room_broadcast': "{0}: {1}",
         'choose_language': "🌍 Please select your language:",
-        'language_set': "✅ Language updated."
+        'language_set': "✅ Language updated.",
+        'room_full': "❗ The room is full. You will be moved to a new room.",
     }
 }
 
@@ -89,6 +91,9 @@ def join_room(message):
     nickname = assign_nickname(room_id, user_id)
     rooms[room_id]['users'].append(user_id)
     user_rooms[user_id] = room_id
+
+    if len(rooms[room_id]['users']) > 3:
+        bot.send_message(user_id, get_message(user_id, 'room_full'))
 
     bot.send_message(user_id, get_message(user_id, 'joined_room', room_id, nickname))
     bot.send_message(user_id, get_message(user_id, 'help'))
