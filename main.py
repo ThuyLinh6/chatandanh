@@ -1,165 +1,123 @@
 import telebot
 from telebot import types
 import os
+from time import time
 
 bot = telebot.TeleBot(os.getenv("BOT_TOKEN"))
 
+waiting_users = []
+active_chats = {}
+waiting_start_time = {}
 user_languages = {}
-rooms = {}  # { room_id: { 'users': [user1, user2, ...], 'nicknames': ['Ẩn danh 1', 'Ẩn danh 2', ...] } }
-user_rooms = {}  # { user_id: room_id }
 
 messages = {
     'vi': {
         'start': "👋 Xin chào! Chọn chức năng bên dưới để bắt đầu.",
-        'help': """📖 Hướng dẫn:
-👉 /room — Vào phòng trò chuyện
-👉 /leaveroom — Rời phòng
-👉 /lang — Chuyển ngôn ngữ""",
-        'joined_room': "✅ Bạn đã tham gia phòng số {0} với tên ẩn danh: {1}.",
-        'left_room': "🚪 Bạn đã rời phòng.",
-        'not_in_room': "❗ Bạn không ở phòng nào.",
-        'room_broadcast': "{0}: {1}",
-        'choose_language': "🌍 Vui lòng chọn ngôn ngữ:",
-        'language_set': "✅ Đã chuyển ngôn ngữ.",
-        'room_full': "❗ Phòng đã đầy. Bạn sẽ được đưa vào phòng mới.",
+        'in_chat': "❗ Bạn đang trong một cuộc trò chuyện rồi!\nDùng /next để tìm người mới hoặc /stop để dừng lại.",
+        'waiting': "⏳ Bạn đã vào hàng đợi. Đợi tí nhé...",
+        'already_waiting': "🕐 Bạn đang chờ sẵn rồi. Đợi hệ thống ghép cặp nhé!",
+        'no_chat': "⚠️ Bạn chưa có người trò chuyện.\nNhấn /search để bắt đầu tìm người nhé!",
+        'stop': "🚫 Bạn đã dừng trò chuyện.",
+        'search': "🔗 Đã tìm được nhóm chat! Bắt đầu trò chuyện nào!",
+        'online': "👥 Hiện có {0} người đang chờ ghép.",
+        'help': """ 📚 Hướng dẫn:
+👉 /search — Tìm người để trò chuyện
+👉 /next — Chuyển nhóm khác
+👉 /stop — Dừng trò chuyện
+👉 /online — Xem số người đang chờ
+👉 /lang — Chuyển đổi ngôn ngữ"""
     },
-    'en': {
-        'start': "👋 Hello! Choose an option below to get started.",
-        'help': """📖 Instructions:
-👉 /room — Join the chat room
-👉 /leaveroom — Leave the room
-👉 /lang — Change language""",
-        'joined_room': "✅ You've joined room #{0} with the nickname: {1}.",
-        'left_room': "🚪 You've left the room.",
-        'not_in_room': "❗ You're not in any room.",
-        'room_broadcast': "{0}: {1}",
-        'choose_language': "🌍 Please select your language:",
-        'language_set': "✅ Language updated.",
-        'room_full': "❗ The room is full. You will be moved to a new room.",
-    }
 }
 
 def get_message(user_id, key, *args):
-    lang = user_languages.get(user_id, 'vi')
-    return messages[lang][key].format(*args)
+    language = user_languages.get(user_id, 'vi')
+    return messages[language].get(key, '').format(*args)
 
-def main_menu(user_id):
-    lang = user_languages.get(user_id, 'vi')
+def stop_chat(user_id, notify=True):
+    if user_id in active_chats:
+        group = active_chats.pop(user_id)
+        for member in group:
+            if member != user_id:
+                active_chats.pop(member, None)
+                if notify:
+                    bot.send_message(member, get_message(member, 'stop'))
+    elif user_id in waiting_users:
+        waiting_users.remove(user_id)
 
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    if lang == 'vi':
-        markup.add("👥 Vào phòng")
-        markup.add("🔍 Tìm người")
-    else:
-        markup.add("👥 Join room")
-        markup.add("🔍 Search")
+    if notify:
+        bot.send_message(user_id, get_message(user_id, 'stop'))
 
-    bot.send_message(user_id, get_message(user_id, 'start'), reply_markup=markup)
+def match_users():
+    while len(waiting_users) >= 4:
+        group = [waiting_users.pop(0) for _ in range(4)]
+        for user in group:
+            active_chats[user] = group
+            bot.send_message(user, get_message(user, 'search'))
 
-def get_available_room():
-    for room_id, room_data in rooms.items():
-        if len(room_data['users']) < 4:
-            return room_id
-    new_room_id = len(rooms) + 1
-    rooms[new_room_id] = {'users': [], 'nicknames': []}
-    return new_room_id
-
-def assign_nickname(room_id, user_id):
-    room_data = rooms[room_id]
-    nickname = f"Ẩn danh {len(room_data['nicknames']) + 1}"
-    room_data['nicknames'].append(nickname)
-    return nickname
+def is_user_in_chat(user_id):
+    return user_id in active_chats or user_id in waiting_users
 
 @bot.message_handler(commands=['start'])
-def handle_start(message):
+def start(message):
     user_id = message.chat.id
-    if user_id not in user_languages:
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        markup.add("Tiếng Việt", "English")
-        bot.send_message(user_id, get_message(user_id, 'choose_language'), reply_markup=markup)
-    else:
-        main_menu(user_id)
-
-@bot.message_handler(commands=['room'])
-def join_room(message):
-    user_id = message.chat.id
-    if user_id in user_rooms:
-        bot.send_message(user_id, "❗ Bạn đã tham gia phòng rồi.")
-        return
-
-    room_id = get_available_room()
-    nickname = assign_nickname(room_id, user_id)
-    rooms[room_id]['users'].append(user_id)
-    user_rooms[user_id] = room_id
-
-    if len(rooms[room_id]['users']) > 3:
-        bot.send_message(user_id, get_message(user_id, 'room_full'))
-
-    bot.send_message(user_id, get_message(user_id, 'joined_room', room_id, nickname))
-    bot.send_message(user_id, get_message(user_id, 'help'))
-
-@bot.message_handler(commands=['leaveroom'])
-def leave_room(message):
-    user_id = message.chat.id
-    if user_id not in user_rooms:
-        bot.send_message(user_id, get_message(user_id, 'not_in_room'))
-        return
-
-    room_id = user_rooms.pop(user_id)
-    index = rooms[room_id]['users'].index(user_id)
-
-    rooms[room_id]['users'].remove(user_id)
-    rooms[room_id]['nicknames'].pop(index)
-
-    bot.send_message(user_id, get_message(user_id, 'left_room'))
-
-    # Hiện lại menu
-    main_menu(user_id)
-
-@bot.callback_query_handler(func=lambda call: call.data == "lang")
-def handle_language_change(call):
-    user_id = call.message.chat.id
-
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("Tiếng Việt", "English")
+    markup.add('/search', '/next', '/stop', '/online')
+    bot.send_message(user_id, get_message(user_id, 'start'), reply_markup=markup)
 
-    bot.send_message(user_id, get_message(user_id, 'choose_language'), reply_markup=markup)
-
-@bot.message_handler(func=lambda message: message.text in ["Tiếng Việt", "English"])
-def handle_language_selected(message):
+@bot.message_handler(commands=['search'])
+def search(message):
     user_id = message.chat.id
+    if is_user_in_chat(user_id):
+        bot.send_message(user_id, get_message(user_id, 'in_chat'))
+        return
+    waiting_users.append(user_id)
+    bot.send_message(user_id, get_message(user_id, 'waiting'))
+    match_users()
 
-    if message.text == "Tiếng Việt":
-        user_languages[user_id] = 'vi'
-    else:
-        user_languages[user_id] = 'en'
-
-    bot.send_message(user_id, get_message(user_id, 'language_set'))
-
-    main_menu(user_id)
-
-@bot.message_handler(func=lambda message: message.text in ["👥 Vào phòng", "👥 Join room"])
-def handle_room_button(message):
-    join_room(message)
-
-@bot.message_handler(func=lambda message: message.text in ["🔍 Tìm người", "🔍 Search"])
-def handle_search_button(message):
-    bot.send_message(message.chat.id, "🚀 Tính năng này đang được phát triển!")
-
-@bot.message_handler(content_types=['text'])
-def handle_message(message):
+@bot.message_handler(commands=['next'])
+def next(message):
     user_id = message.chat.id
-    if user_id not in user_rooms:
-        bot.send_message(user_id, get_message(user_id, 'not_in_room'))
+    stop_chat(user_id, notify=False)
+    search(message)
+
+@bot.message_handler(commands=['stop'])
+def stop(message):
+    user_id = message.chat.id
+    stop_chat(user_id)
+
+@bot.message_handler(commands=['online'])
+def online(message):
+    bot.send_message(message.chat.id, get_message(message.chat.id, 'online', len(waiting_users)))
+
+@bot.message_handler(content_types=['text', 'photo', 'video', 'sticker', 'voice', 'document'])
+def chat(message):
+    user_id = message.chat.id
+    group = active_chats.get(user_id)
+    if not group or user_id not in group:
+        bot.send_message(user_id, get_message(user_id, 'no_chat'))
+        stop_chat(user_id)
         return
 
-    room_id = user_rooms[user_id]
-    nickname = rooms[room_id]['nicknames'][rooms[room_id]['users'].index(user_id)]
-    text = message.text
-
-    # Gửi tin nhắn cho người khác (không gửi lại chính mình)
-    for user in rooms[room_id]['users']:
-        if user != user_id:
-            bot.send_message(user, get_message(user, 'room_broadcast', nickname, text))
+    sender_index = group.index(user_id) + 1
+    for member_id in group:
+        if member_id == user_id:
+            continue
+        if message.content_type == 'text':
+            bot.send_message(member_id, f"Người {sender_index}: {message.text}")
+        elif message.content_type == 'photo':
+            bot.send_photo(member_id, message.photo[-1].file_id, caption=f"Người {sender_index}: {message.caption or ''}")
+        elif message.content_type == 'video':
+            bot.send_video(member_id, message.video.file_id, caption=f"Người {sender_index}: {message.caption or ''}")
+        elif message.content_type == 'sticker':
+            bot.send_message(member_id, f"Người {sender_index} gửi sticker:")
+            bot.send_sticker(member_id, message.sticker.file_id)
+        elif message.content_type == 'voice':
+            bot.send_message(member_id, f"Người {sender_index} gửi voice:")
+            bot.send_voice(member_id, message.voice.file_id)
+        elif message.content_type == 'document':
+            bot.send_message(member_id, f"Người {sender_index} gửi file:")
+            bot.send_document(member_id, message.document.file_id, caption=f"Người {sender_index}: {message.caption or ''}")
+        else:
+            bot.send_message(user_id, "❗ Không hỗ trợ loại nội dung này.")
 
 bot.infinity_polling()
