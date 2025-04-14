@@ -1,6 +1,7 @@
 import telebot
 from telebot import types
 import os
+import threading
 from time import time
 
 bot = telebot.TeleBot(os.getenv("BOT_TOKEN"))
@@ -9,6 +10,9 @@ waiting_users = []
 active_chats = {}
 waiting_start_time = {}
 user_languages = {}
+
+# Add a Lock to handle concurrent updates safely
+lock = threading.Lock()
 
 messages = {
     'vi': {
@@ -105,7 +109,8 @@ def search(message):
         bot.send_message(user_id, get_message(user_id, 'in_chat'))
         return
 
-    waiting_users.append(user_id)
+    with lock:
+        waiting_users.append(user_id)
     bot.send_message(user_id, get_message(user_id, 'waiting'))
     match_users()
 
@@ -158,4 +163,5 @@ def chat(message):
         bot.send_message(user_id, get_message(user_id, 'no_chat'))
         stop_chat(user_id)
 
-bot.infinity_polling()
+# Use long_polling() instead of infinity_polling()
+bot.polling(none_stop=True, interval=0)
