@@ -31,5 +31,5 @@ Bot chat ẩn danh giúp kết nối ngẫu nhiên 2 người dùng với nhau q
 
 ## Liên hệ:
 Tác giả: Minh Hiếu  
-- Telegram: [@mmhieusocu](https://t.me/mmhieusocu)  
+- Telegram: [@mmhieusocu](https://t.me/mmhieusocute)  
 - Facebook: [fb.me/lunax1603](https://fb.me/lunax1603)
