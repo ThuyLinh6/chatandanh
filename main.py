@@ -5,7 +5,7 @@ import os
 bot = telebot.TeleBot(os.getenv("BOT_TOKEN"))
 
 user_languages = {}
-rooms = {}  # { room_id: { 'users': [user1, user2, ...], 'done_users': [user1, user2, ...], 'nicknames': ['Ẩn danh 1', 'Ẩn danh 2', ...] } }
+rooms = {}  # { room_id: { 'users': [user1, user2, ...], 'nicknames': ['Ẩn danh 1', 'Ẩn danh 2', ...] } }
 user_rooms = {}  # { user_id: room_id }
 
 messages = {
@@ -18,7 +18,9 @@ messages = {
         'joined_room': "✅ Bạn đã tham gia phòng số {0} với tên ẩn danh: {1}.",
         'left_room': "🚪 Bạn đã rời phòng.",
         'not_in_room': "❗ Bạn không ở phòng nào.",
-        'room_broadcast': "📣 Tin nhắn từ {0}: {1}",
+        'room_broadcast': "{0}: {1}",
+        'choose_language': "🌍 Vui lòng chọn ngôn ngữ:",
+        'language_set': "✅ Đã chuyển ngôn ngữ."
     },
     'en': {
         'start': "👋 Hello! Choose an option below to get started.",
@@ -29,7 +31,9 @@ messages = {
         'joined_room': "✅ You've joined room #{0} with the nickname: {1}.",
         'left_room': "🚪 You've left the room.",
         'not_in_room': "❗ You're not in any room.",
-        'room_broadcast': "📣 Message from {0}: {1}",
+        'room_broadcast': "{0}: {1}",
+        'choose_language': "🌍 Please select your language:",
+        'language_set': "✅ Language updated."
     }
 }
 
@@ -39,10 +43,15 @@ def get_message(user_id, key, *args):
 
 def main_menu(user_id):
     lang = user_languages.get(user_id, 'vi')
-    room_label = "Phòng trò chuyện" if lang == 'vi' else "Chat room"
-    markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton(f"👥 {room_label}", callback_data="room"))
-    markup.add(types.InlineKeyboardButton("🌍 Ngôn ngữ", callback_data="lang"))
+
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    if lang == 'vi':
+        markup.add("👥 Vào phòng")
+        markup.add("🔍 Tìm người")
+    else:
+        markup.add("👥 Join room")
+        markup.add("🔍 Search")
+
     bot.send_message(user_id, get_message(user_id, 'start'), reply_markup=markup)
 
 def get_available_room():
@@ -50,7 +59,7 @@ def get_available_room():
         if len(room_data['users']) < 4:
             return room_id
     new_room_id = len(rooms) + 1
-    rooms[new_room_id] = {'users': [], 'done_users': [], 'nicknames': []}
+    rooms[new_room_id] = {'users': [], 'nicknames': []}
     return new_room_id
 
 def assign_nickname(room_id, user_id):
@@ -65,7 +74,7 @@ def handle_start(message):
     if user_id not in user_languages:
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
         markup.add("Tiếng Việt", "English")
-        bot.send_message(user_id, get_message(user_id, 'start'), reply_markup=markup)
+        bot.send_message(user_id, get_message(user_id, 'choose_language'), reply_markup=markup)
     else:
         main_menu(user_id)
 
@@ -92,13 +101,45 @@ def leave_room(message):
         return
 
     room_id = user_rooms.pop(user_id)
-    rooms[room_id]['users'].remove(user_id)
+    index = rooms[room_id]['users'].index(user_id)
 
-    # Remove nickname
-    nickname_index = rooms[room_id]['users'].index(user_id)
-    rooms[room_id]['nicknames'].pop(nickname_index)
+    rooms[room_id]['users'].remove(user_id)
+    rooms[room_id]['nicknames'].pop(index)
 
     bot.send_message(user_id, get_message(user_id, 'left_room'))
+
+    # Hiện lại menu
+    main_menu(user_id)
+
+@bot.callback_query_handler(func=lambda call: call.data == "lang")
+def handle_language_change(call):
+    user_id = call.message.chat.id
+
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("Tiếng Việt", "English")
+
+    bot.send_message(user_id, get_message(user_id, 'choose_language'), reply_markup=markup)
+
+@bot.message_handler(func=lambda message: message.text in ["Tiếng Việt", "English"])
+def handle_language_selected(message):
+    user_id = message.chat.id
+
+    if message.text == "Tiếng Việt":
+        user_languages[user_id] = 'vi'
+    else:
+        user_languages[user_id] = 'en'
+
+    bot.send_message(user_id, get_message(user_id, 'language_set'))
+
+    main_menu(user_id)
+
+@bot.message_handler(func=lambda message: message.text in ["👥 Vào phòng", "👥 Join room"])
+def handle_room_button(message):
+    join_room(message)
+
+@bot.message_handler(func=lambda message: message.text in ["🔍 Tìm người", "🔍 Search"])
+def handle_search_button(message):
+    bot.send_message(message.chat.id, "🚀 Tính năng này đang được phát triển!")
 
 @bot.message_handler(content_types=['text'])
 def handle_message(message):
@@ -111,8 +152,9 @@ def handle_message(message):
     nickname = rooms[room_id]['nicknames'][rooms[room_id]['users'].index(user_id)]
     text = message.text
 
-    # Broadcast message to the room
+    # Gửi tin nhắn cho người khác (không gửi lại chính mình)
     for user in rooms[room_id]['users']:
-        bot.send_message(user, get_message(user, 'room_broadcast', nickname, text))
+        if user != user_id:
+            bot.send_message(user, get_message(user, 'room_broadcast', nickname, text))
 
 bot.infinity_polling()
